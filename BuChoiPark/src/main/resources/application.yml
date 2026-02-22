@@ -1,6 +1,6 @@
 spring:
   datasource:
-    url: jdbc:sqlite:/app/data/buchoipark.db
+    url: jdbc:sqlite:buchoipark.db
     driver-class-name: org.sqlite.JDBC
 
   flyway:
