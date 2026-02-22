@@ -24,7 +24,7 @@ extra["springShellVersion"] = "4.0.1"
 dependencies {
 	// 필요할 수 있을 것 같아 미리 추가해둠.
 	//	implementation("org.springframework.shell:spring-shell-starter")
-	//	runtimeOnly("io.micrometer:micrometer-registry-prometheus")
+	runtimeOnly("io.micrometer:micrometer-registry-prometheus")
 
 	// kotlin, jackson
 	implementation("org.jetbrains.kotlin:kotlin-reflect")
@@ -35,9 +35,9 @@ dependencies {
 	implementation("org.springframework.boot:spring-boot-starter-webmvc")
 
 	// persistence
-	implementation("org.springframework.boot:spring-boot-starter-data-jdbc")
+	implementation("org.springframework.boot:spring-boot-starter-jdbc")
 	implementation("org.springframework.boot:spring-boot-starter-flyway")
-	runtimeOnly("org.xerial:sqlite-jdbc:3.51.2.0")
+	implementation("org.xerial:sqlite-jdbc:3.48.0.0")
 
 	// test
 	testImplementation("org.springframework.boot:spring-boot-starter-webmvc-test")
@@ -58,6 +58,7 @@ dependencyManagement {
 kotlin {
 	compilerOptions {
 		freeCompilerArgs.addAll("-Xjsr305=strict", "-Xannotation-default-target=param-property")
+		javaParameters = true
 	}
 }
 
