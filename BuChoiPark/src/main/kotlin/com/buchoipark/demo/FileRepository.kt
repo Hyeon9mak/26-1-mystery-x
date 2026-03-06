@@ -122,6 +122,24 @@ class FileRepository(
         }
     }
 
+    fun renameFile(id: String, fileName: String, filePath: String) {
+        jdbcTemplate.update(
+            "UPDATE files SET file_name = ?, file_path = ? WHERE id = ?",
+            fileName, filePath, id,
+        )
+    }
+
+    fun deleteFile(id: String): Int {
+        return jdbcTemplate.update("DELETE FROM files WHERE id = ?", id)
+    }
+
+    fun deleteFilesInFolder(folderPath: String): Int {
+        return jdbcTemplate.update(
+            "DELETE FROM files WHERE file_path = ? OR file_path LIKE ?",
+            folderPath, "$folderPath/%",
+        )
+    }
+
     fun insertFile(response: FileUploadResponse) {
         jdbcTemplate.update(
             """

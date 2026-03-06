@@ -432,6 +432,338 @@ class FileUploadControllerTests(
     }
 
     @Test
+    fun `creates folder with valid path and userId`() {
+        val restTemplate = RestTemplate().apply {
+            errorHandler = object : DefaultResponseErrorHandler() {
+                override fun hasError(response: ClientHttpResponse): Boolean = false
+            }
+        }
+        val headers = HttpHeaders()
+        headers.contentType = MediaType.APPLICATION_JSON
+        val body = jacksonObjectMapper().writeValueAsString(mapOf("folderPath" to "/virtual/new-folder", "userId" to "user-folder"))
+        val response = restTemplate.postForEntity(
+            "http://localhost:$port/folders",
+            HttpEntity(body, headers),
+            String::class.java
+        )
+        assertThat(response.statusCode.value()).isEqualTo(200)
+        val tree = jacksonObjectMapper().readTree(response.body ?: "{}")
+        assertThat(tree.get("folderPath")?.asText()).isEqualTo("/virtual/new-folder")
+        assertThat(tree.get("userId")?.asText()).isEqualTo("user-folder")
+    }
+
+    @Test
+    fun `returns 400 when folderPath is blank for folder creation`() {
+        val restTemplate = RestTemplate().apply {
+            errorHandler = object : DefaultResponseErrorHandler() {
+                override fun hasError(response: ClientHttpResponse): Boolean = false
+            }
+        }
+        val headers = HttpHeaders()
+        headers.contentType = MediaType.APPLICATION_JSON
+        val body = jacksonObjectMapper().writeValueAsString(mapOf("folderPath" to "   ", "userId" to "user-folder"))
+        val response = restTemplate.postForEntity(
+            "http://localhost:$port/folders",
+            HttpEntity(body, headers),
+            String::class.java
+        )
+        assertThat(response.statusCode.value()).isEqualTo(400)
+    }
+
+    @Test
+    fun `returns 400 when folderPath does not start with slash`() {
+        val restTemplate = RestTemplate().apply {
+            errorHandler = object : DefaultResponseErrorHandler() {
+                override fun hasError(response: ClientHttpResponse): Boolean = false
+            }
+        }
+        val headers = HttpHeaders()
+        headers.contentType = MediaType.APPLICATION_JSON
+        val body = jacksonObjectMapper().writeValueAsString(mapOf("folderPath" to "no-slash/folder", "userId" to "user-folder"))
+        val response = restTemplate.postForEntity(
+            "http://localhost:$port/folders",
+            HttpEntity(body, headers),
+            String::class.java
+        )
+        assertThat(response.statusCode.value()).isEqualTo(400)
+    }
+
+    @Test
+    fun `returns 400 when userId is blank for folder creation`() {
+        val restTemplate = RestTemplate().apply {
+            errorHandler = object : DefaultResponseErrorHandler() {
+                override fun hasError(response: ClientHttpResponse): Boolean = false
+            }
+        }
+        val headers = HttpHeaders()
+        headers.contentType = MediaType.APPLICATION_JSON
+        val body = jacksonObjectMapper().writeValueAsString(mapOf("folderPath" to "/virtual/folder", "userId" to ""))
+        val response = restTemplate.postForEntity(
+            "http://localhost:$port/folders",
+            HttpEntity(body, headers),
+            String::class.java
+        )
+        assertThat(response.statusCode.value()).isEqualTo(400)
+    }
+
+    @Test
+    fun `renames file and updates db`() {
+        val restTemplate = RestTemplate().apply {
+            errorHandler = object : DefaultResponseErrorHandler() {
+                override fun hasError(response: ClientHttpResponse): Boolean = false
+            }
+        }
+        val uploadHeaders = HttpHeaders()
+        uploadHeaders.contentType = MediaType.MULTIPART_FORM_DATA
+        val fileResource = object : ByteArrayResource("rename me".toByteArray()) {
+            override fun getFilename(): String = "old-name.txt"
+        }
+        val uploadBody = LinkedMultiValueMap<String, Any>()
+        uploadBody.add("userId", "user-rename")
+        uploadBody.add("filePath", "/virtual/old-name.txt")
+        uploadBody.add("file", fileResource)
+        val uploadResponse = restTemplate.postForEntity(
+            "http://localhost:$port/files/upload",
+            HttpEntity(uploadBody, uploadHeaders),
+            String::class.java
+        )
+        assertThat(uploadResponse.statusCode.value()).isEqualTo(200)
+        val id = jacksonObjectMapper().readTree(uploadResponse.body ?: "{}").get("id").asText()
+
+        val renameHeaders = HttpHeaders()
+        renameHeaders.contentType = MediaType.APPLICATION_JSON
+        val renameBody = jacksonObjectMapper().writeValueAsString(mapOf("name" to "new-name.txt"))
+        val renameResponse = restTemplate.postForEntity(
+            "http://localhost:$port/files/$id/rename",
+            HttpEntity(renameBody, renameHeaders),
+            String::class.java
+        )
+        assertThat(renameResponse.statusCode.value()).isEqualTo(200)
+        val tree = jacksonObjectMapper().readTree(renameResponse.body ?: "{}")
+        assertThat(tree.get("fileName").asText()).isEqualTo("new-name.txt")
+        assertThat(tree.get("filePath").asText()).isEqualTo("/virtual/new-name.txt")
+
+        val dbName = jdbcTemplate.queryForObject("SELECT file_name FROM files WHERE id = ?", String::class.java, id)
+        val dbPath = jdbcTemplate.queryForObject("SELECT file_path FROM files WHERE id = ?", String::class.java, id)
+        assertThat(dbName).isEqualTo("new-name.txt")
+        assertThat(dbPath).isEqualTo("/virtual/new-name.txt")
+    }
+
+    @Test
+    fun `returns 404 when renaming non-existent file`() {
+        val restTemplate = RestTemplate().apply {
+            errorHandler = object : DefaultResponseErrorHandler() {
+                override fun hasError(response: ClientHttpResponse): Boolean = false
+            }
+        }
+        val headers = HttpHeaders()
+        headers.contentType = MediaType.APPLICATION_JSON
+        val body = jacksonObjectMapper().writeValueAsString(mapOf("name" to "new-name.txt"))
+        val response = restTemplate.postForEntity(
+            "http://localhost:$port/files/non-existent-id/rename",
+            HttpEntity(body, headers),
+            String::class.java
+        )
+        assertThat(response.statusCode.value()).isEqualTo(404)
+    }
+
+    @Test
+    fun `returns 400 when rename name is blank`() {
+        val restTemplate = RestTemplate().apply {
+            errorHandler = object : DefaultResponseErrorHandler() {
+                override fun hasError(response: ClientHttpResponse): Boolean = false
+            }
+        }
+        val headers = HttpHeaders()
+        headers.contentType = MediaType.APPLICATION_JSON
+        val body = jacksonObjectMapper().writeValueAsString(mapOf("name" to "  "))
+        val response = restTemplate.postForEntity(
+            "http://localhost:$port/files/some-id/rename",
+            HttpEntity(body, headers),
+            String::class.java
+        )
+        assertThat(response.statusCode.value()).isEqualTo(400)
+    }
+
+    @Test
+    fun `renames folder and updates db`() {
+        val restTemplate = RestTemplate().apply {
+            errorHandler = object : DefaultResponseErrorHandler() {
+                override fun hasError(response: ClientHttpResponse): Boolean = false
+            }
+        }
+        fun uploadWithPath(path: String, fileName: String, content: String): String {
+            val headers = HttpHeaders()
+            headers.contentType = MediaType.MULTIPART_FORM_DATA
+            val fileResource = object : ByteArrayResource(content.toByteArray()) {
+                override fun getFilename(): String = fileName
+            }
+            val body = LinkedMultiValueMap<String, Any>()
+            body.add("userId", "user-rename-folder")
+            body.add("filePath", path)
+            body.add("file", fileResource)
+            val response = restTemplate.postForEntity(
+                "http://localhost:$port/files/upload",
+                HttpEntity(body, headers),
+                String::class.java
+            )
+            assertThat(response.statusCode.value()).isEqualTo(200)
+            return jacksonObjectMapper().readTree(response.body ?: "{}").get("id").asText()
+        }
+        val id1 = uploadWithPath("/virtual/rename-folder/a.txt", "a.txt", "aaa")
+        val id2 = uploadWithPath("/virtual/rename-folder/sub/b.txt", "b.txt", "bbb")
+
+        val headers = HttpHeaders()
+        headers.contentType = MediaType.APPLICATION_JSON
+        val body = jacksonObjectMapper().writeValueAsString(mapOf("folderPath" to "/virtual/rename-folder", "newName" to "renamed-folder"))
+        val response = restTemplate.postForEntity(
+            "http://localhost:$port/folders/rename",
+            HttpEntity(body, headers),
+            String::class.java
+        )
+        assertThat(response.statusCode.value()).isEqualTo(200)
+        val tree = jacksonObjectMapper().readTree(response.body ?: "{}")
+        assertThat(tree.get("updated").asInt()).isEqualTo(2)
+        assertThat(tree.get("fromPath").asText()).isEqualTo("/virtual/rename-folder")
+        assertThat(tree.get("toPath").asText()).isEqualTo("/virtual/renamed-folder")
+
+        val path1 = jdbcTemplate.queryForObject("SELECT file_path FROM files WHERE id = ?", String::class.java, id1)
+        val path2 = jdbcTemplate.queryForObject("SELECT file_path FROM files WHERE id = ?", String::class.java, id2)
+        assertThat(path1).isEqualTo("/virtual/renamed-folder/a.txt")
+        assertThat(path2).isEqualTo("/virtual/renamed-folder/sub/b.txt")
+    }
+
+    @Test
+    fun `returns 400 when folderPath is blank for folder rename`() {
+        val restTemplate = RestTemplate().apply {
+            errorHandler = object : DefaultResponseErrorHandler() {
+                override fun hasError(response: ClientHttpResponse): Boolean = false
+            }
+        }
+        val headers = HttpHeaders()
+        headers.contentType = MediaType.APPLICATION_JSON
+        val body = jacksonObjectMapper().writeValueAsString(mapOf("folderPath" to "", "newName" to "new-name"))
+        val response = restTemplate.postForEntity(
+            "http://localhost:$port/folders/rename",
+            HttpEntity(body, headers),
+            String::class.java
+        )
+        assertThat(response.statusCode.value()).isEqualTo(400)
+    }
+
+    @Test
+    fun `deletes file and returns 404 on second delete`() {
+        val restTemplate = RestTemplate().apply {
+            errorHandler = object : DefaultResponseErrorHandler() {
+                override fun hasError(response: ClientHttpResponse): Boolean = false
+            }
+        }
+        val uploadHeaders = HttpHeaders()
+        uploadHeaders.contentType = MediaType.MULTIPART_FORM_DATA
+        val fileResource = object : ByteArrayResource("delete me".toByteArray()) {
+            override fun getFilename(): String = "delete.txt"
+        }
+        val uploadBody = LinkedMultiValueMap<String, Any>()
+        uploadBody.add("userId", "user-delete")
+        uploadBody.add("filePath", "/virtual/delete.txt")
+        uploadBody.add("file", fileResource)
+        val uploadResponse = restTemplate.postForEntity(
+            "http://localhost:$port/files/upload",
+            HttpEntity(uploadBody, uploadHeaders),
+            String::class.java
+        )
+        assertThat(uploadResponse.statusCode.value()).isEqualTo(200)
+        val id = jacksonObjectMapper().readTree(uploadResponse.body ?: "{}").get("id").asText()
+
+        val deleteResponse = restTemplate.exchange(
+            "http://localhost:$port/files/$id",
+            org.springframework.http.HttpMethod.DELETE,
+            HttpEntity.EMPTY,
+            Void::class.java
+        )
+        assertThat(deleteResponse.statusCode.value()).isEqualTo(204)
+
+        val count = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM files WHERE id = ?", Long::class.java, id)
+        assertThat(count).isEqualTo(0L)
+
+        val secondDelete = restTemplate.exchange(
+            "http://localhost:$port/files/$id",
+            org.springframework.http.HttpMethod.DELETE,
+            HttpEntity.EMPTY,
+            Void::class.java
+        )
+        assertThat(secondDelete.statusCode.value()).isEqualTo(404)
+    }
+
+    @Test
+    fun `deletes folder files and keeps other folder files`() {
+        val restTemplate = RestTemplate().apply {
+            errorHandler = object : DefaultResponseErrorHandler() {
+                override fun hasError(response: ClientHttpResponse): Boolean = false
+            }
+        }
+        fun uploadWithPath(path: String, fileName: String, content: String): String {
+            val headers = HttpHeaders()
+            headers.contentType = MediaType.MULTIPART_FORM_DATA
+            val fileResource = object : ByteArrayResource(content.toByteArray()) {
+                override fun getFilename(): String = fileName
+            }
+            val body = LinkedMultiValueMap<String, Any>()
+            body.add("userId", "user-delete-folder")
+            body.add("filePath", path)
+            body.add("file", fileResource)
+            val response = restTemplate.postForEntity(
+                "http://localhost:$port/files/upload",
+                HttpEntity(body, headers),
+                String::class.java
+            )
+            assertThat(response.statusCode.value()).isEqualTo(200)
+            return jacksonObjectMapper().readTree(response.body ?: "{}").get("id").asText()
+        }
+        val id1 = uploadWithPath("/delete-target", "a.txt", "aaa")
+        val id2 = uploadWithPath("/delete-target/sub/b.txt", "b.txt", "bbb")
+        val id3 = uploadWithPath("/delete-target/c.txt", "c.txt", "ccc")
+        val otherId = uploadWithPath("/keep-folder/d.txt", "d.txt", "ddd")
+
+        val headers = HttpHeaders()
+        headers.contentType = MediaType.APPLICATION_JSON
+        val response = restTemplate.exchange(
+            "http://localhost:$port/folders?folderPath=/delete-target",
+            org.springframework.http.HttpMethod.DELETE,
+            HttpEntity<Void>(null, headers),
+            String::class.java
+        )
+        assertThat(response.statusCode.value()).isEqualTo(200)
+        val tree = jacksonObjectMapper().readTree(response.body ?: "{}")
+        assertThat(tree.get("deleted").asInt()).isEqualTo(3)
+
+        for (id in listOf(id1, id2, id3)) {
+            val count = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM files WHERE id = ?", Long::class.java, id)
+            assertThat(count).isEqualTo(0L)
+        }
+        val otherCount = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM files WHERE id = ?", Long::class.java, otherId)
+        assertThat(otherCount).isEqualTo(1L)
+    }
+
+    @Test
+    fun `deletes empty folder returns deleted=0`() {
+        val restTemplate = RestTemplate().apply {
+            errorHandler = object : DefaultResponseErrorHandler() {
+                override fun hasError(response: ClientHttpResponse): Boolean = false
+            }
+        }
+        val response = restTemplate.exchange(
+            "http://localhost:$port/folders?folderPath=/empty-folder-xyz",
+            org.springframework.http.HttpMethod.DELETE,
+            HttpEntity.EMPTY,
+            String::class.java
+        )
+        assertThat(response.statusCode.value()).isEqualTo(200)
+        val tree = jacksonObjectMapper().readTree(response.body ?: "{}")
+        assertThat(tree.get("deleted").asInt()).isEqualTo(0)
+    }
+
+    @Test
     fun `moves folder metadata by prefix`() {
         val restTemplate = RestTemplate().apply {
             errorHandler = object : DefaultResponseErrorHandler() {
