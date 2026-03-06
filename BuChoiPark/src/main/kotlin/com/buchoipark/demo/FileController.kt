@@ -84,6 +84,40 @@ class FileController(
         return fileService.listFiles(userId)
     }
 
+    @PostMapping("/folders")
+    fun createFolder(@RequestBody request: CreateFolderRequest): ResponseEntity<FolderResponse> {
+        if (request.folderPath.isBlank()) return ResponseEntity.status(HttpStatus.BAD_REQUEST).build()
+        if (!request.folderPath.startsWith("/")) return ResponseEntity.status(HttpStatus.BAD_REQUEST).build()
+        if (request.userId.isBlank()) return ResponseEntity.status(HttpStatus.BAD_REQUEST).build()
+        return ResponseEntity.ok(fileService.createFolder(request.folderPath, request.userId))
+    }
+
+    @PostMapping("/files/{id}/rename")
+    fun renameFile(@PathVariable("id") id: String, @RequestBody request: RenameFileRequest): ResponseEntity<FileUploadResponse> {
+        if (request.name.isBlank()) return ResponseEntity.status(HttpStatus.BAD_REQUEST).build()
+        val updated = fileService.renameFile(id, request.name) ?: return ResponseEntity.status(HttpStatus.NOT_FOUND).build()
+        return ResponseEntity.ok(updated)
+    }
+
+    @PostMapping("/folders/rename")
+    fun renameFolder(@RequestBody request: RenameFolderRequest): ResponseEntity<Map<String, Any>> {
+        if (request.folderPath.isBlank() || request.newName.isBlank()) return ResponseEntity.status(HttpStatus.BAD_REQUEST).build()
+        val result = fileService.renameFolder(request.folderPath, request.newName)
+        return ResponseEntity.ok(mapOf("updated" to result.updated, "fromPath" to result.fromPath, "toPath" to result.toPath))
+    }
+
+    @DeleteMapping("/files/{id}")
+    fun deleteFile(@PathVariable("id") id: String): ResponseEntity<Void> {
+        return if (fileService.deleteFile(id)) ResponseEntity.noContent().build()
+        else ResponseEntity.status(HttpStatus.NOT_FOUND).build()
+    }
+
+    @DeleteMapping("/folders")
+    fun deleteFolder(@RequestParam("folderPath") folderPath: String): ResponseEntity<Map<String, Any>> {
+        if (folderPath.isBlank()) return ResponseEntity.status(HttpStatus.BAD_REQUEST).build()
+        return ResponseEntity.ok(mapOf("deleted" to fileService.deleteFilesInFolder(folderPath)))
+    }
+
     @DeleteMapping("/files")
     fun deleteFile(
         @RequestParam("userId") userId: String,
@@ -169,3 +203,9 @@ data class MoveFolderRequest(
     val fromPath: String,
     val toPath: String,
 )
+
+data class CreateFolderRequest(val folderPath: String, val userId: String)
+
+data class RenameFileRequest(val name: String)
+
+data class RenameFolderRequest(val folderPath: String, val newName: String)

@@ -157,6 +157,31 @@ class FileService(
         return response
     }
 
+    fun createFolder(folderPath: String, userId: String): FolderResponse {
+        return FolderResponse(folderPath = folderPath, userId = userId)
+    }
+
+    fun renameFile(id: String, name: String): FileUploadResponse? {
+        val existing = fileRepository.findFileById(id) ?: return null
+        val lastSlash = existing.filePath.lastIndexOf('/')
+        val newFilePath = if (lastSlash >= 0) existing.filePath.substring(0, lastSlash + 1) + name else name
+        fileRepository.renameFile(id, name, newFilePath)
+        return existing.copy(fileName = name, filePath = newFilePath)
+    }
+
+    fun renameFolder(folderPath: String, newName: String): RenameFolderResult {
+        val trimmed = folderPath.trimEnd('/')
+        val lastSlash = trimmed.lastIndexOf('/')
+        val parentPath = if (lastSlash > 0) trimmed.substring(0, lastSlash) else "/"
+        val newFolderPath = if (parentPath == "/") "/$newName" else "$parentPath/$newName"
+        val updated = fileRepository.updateFilePathsForMoveFolder(trimmed, newFolderPath)
+        return RenameFolderResult(updated = updated, fromPath = trimmed, toPath = newFolderPath)
+    }
+
+    fun deleteFile(id: String): Boolean = fileRepository.deleteFile(id) > 0
+
+    fun deleteFilesInFolder(folderPath: String): Int = fileRepository.deleteFilesInFolder(folderPath.trimEnd('/'))
+
     private fun normalizeFilePath(path: String, fileName: String): String {
         val trimmed = path.trim()
         if (trimmed.isBlank()) {
@@ -177,6 +202,10 @@ class FileService(
         return trimmed.trimEnd('/').ifBlank { "/" }
     }
 }
+
+data class FolderResponse(val folderPath: String, val userId: String)
+
+data class RenameFolderResult(val updated: Int, val fromPath: String, val toPath: String)
 
 data class FileDownload(
     val path: Path,
