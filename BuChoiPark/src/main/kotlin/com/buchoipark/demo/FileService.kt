@@ -178,10 +178,6 @@ class FileService(
         return RenameFolderResult(updated = updated, fromPath = trimmed, toPath = newFolderPath)
     }
 
-    fun deleteFile(id: String): Boolean = fileRepository.deleteFile(id) > 0
-
-    fun deleteFilesInFolder(folderPath: String): Int = fileRepository.deleteFilesInFolder(folderPath.trimEnd('/'))
-
     private fun normalizeFilePath(path: String, fileName: String): String {
         val trimmed = path.trim()
         if (trimmed.isBlank()) {

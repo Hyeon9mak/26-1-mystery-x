@@ -1,6 +1,6 @@
 package com.buchoipark.demo
 
-import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
+import tools.jackson.module.kotlin.jacksonObjectMapper
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
@@ -649,118 +649,6 @@ class FileUploadControllerTests(
             String::class.java
         )
         assertThat(response.statusCode.value()).isEqualTo(400)
-    }
-
-    @Test
-    fun `deletes file and returns 404 on second delete`() {
-        val restTemplate = RestTemplate().apply {
-            errorHandler = object : DefaultResponseErrorHandler() {
-                override fun hasError(response: ClientHttpResponse): Boolean = false
-            }
-        }
-        val uploadHeaders = HttpHeaders()
-        uploadHeaders.contentType = MediaType.MULTIPART_FORM_DATA
-        val fileResource = object : ByteArrayResource("delete me".toByteArray()) {
-            override fun getFilename(): String = "delete.txt"
-        }
-        val uploadBody = LinkedMultiValueMap<String, Any>()
-        uploadBody.add("userId", "user-delete")
-        uploadBody.add("filePath", "/virtual/delete.txt")
-        uploadBody.add("file", fileResource)
-        val uploadResponse = restTemplate.postForEntity(
-            "http://localhost:$port/files/upload",
-            HttpEntity(uploadBody, uploadHeaders),
-            String::class.java
-        )
-        assertThat(uploadResponse.statusCode.value()).isEqualTo(200)
-        val id = jacksonObjectMapper().readTree(uploadResponse.body ?: "{}").get("id").asText()
-
-        val deleteResponse = restTemplate.exchange(
-            "http://localhost:$port/files/$id",
-            org.springframework.http.HttpMethod.DELETE,
-            HttpEntity.EMPTY,
-            Void::class.java
-        )
-        assertThat(deleteResponse.statusCode.value()).isEqualTo(204)
-
-        val count = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM files WHERE id = ?", Long::class.java, id)
-        assertThat(count).isEqualTo(0L)
-
-        val secondDelete = restTemplate.exchange(
-            "http://localhost:$port/files/$id",
-            org.springframework.http.HttpMethod.DELETE,
-            HttpEntity.EMPTY,
-            Void::class.java
-        )
-        assertThat(secondDelete.statusCode.value()).isEqualTo(404)
-    }
-
-    @Test
-    fun `deletes folder files and keeps other folder files`() {
-        val restTemplate = RestTemplate().apply {
-            errorHandler = object : DefaultResponseErrorHandler() {
-                override fun hasError(response: ClientHttpResponse): Boolean = false
-            }
-        }
-        fun uploadWithPath(path: String, fileName: String, content: String): String {
-            val headers = HttpHeaders()
-            headers.contentType = MediaType.MULTIPART_FORM_DATA
-            val fileResource = object : ByteArrayResource(content.toByteArray()) {
-                override fun getFilename(): String = fileName
-            }
-            val body = LinkedMultiValueMap<String, Any>()
-            body.add("userId", "user-delete-folder")
-            body.add("filePath", path)
-            body.add("file", fileResource)
-            val response = restTemplate.postForEntity(
-                "http://localhost:$port/files/upload",
-                HttpEntity(body, headers),
-                String::class.java
-            )
-            assertThat(response.statusCode.value()).isEqualTo(200)
-            return jacksonObjectMapper().readTree(response.body ?: "{}").get("id").asText()
-        }
-        val id1 = uploadWithPath("/delete-target", "a.txt", "aaa")
-        val id2 = uploadWithPath("/delete-target/sub/b.txt", "b.txt", "bbb")
-        val id3 = uploadWithPath("/delete-target/c.txt", "c.txt", "ccc")
-        val otherId = uploadWithPath("/keep-folder/d.txt", "d.txt", "ddd")
-
-        val headers = HttpHeaders()
-        headers.contentType = MediaType.APPLICATION_JSON
-        val response = restTemplate.exchange(
-            "http://localhost:$port/folders?folderPath=/delete-target",
-            org.springframework.http.HttpMethod.DELETE,
-            HttpEntity<Void>(null, headers),
-            String::class.java
-        )
-        assertThat(response.statusCode.value()).isEqualTo(200)
-        val tree = jacksonObjectMapper().readTree(response.body ?: "{}")
-        assertThat(tree.get("deleted").asInt()).isEqualTo(3)
-
-        for (id in listOf(id1, id2, id3)) {
-            val count = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM files WHERE id = ?", Long::class.java, id)
-            assertThat(count).isEqualTo(0L)
-        }
-        val otherCount = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM files WHERE id = ?", Long::class.java, otherId)
-        assertThat(otherCount).isEqualTo(1L)
-    }
-
-    @Test
-    fun `deletes empty folder returns deleted=0`() {
-        val restTemplate = RestTemplate().apply {
-            errorHandler = object : DefaultResponseErrorHandler() {
-                override fun hasError(response: ClientHttpResponse): Boolean = false
-            }
-        }
-        val response = restTemplate.exchange(
-            "http://localhost:$port/folders?folderPath=/empty-folder-xyz",
-            org.springframework.http.HttpMethod.DELETE,
-            HttpEntity.EMPTY,
-            String::class.java
-        )
-        assertThat(response.statusCode.value()).isEqualTo(200)
-        val tree = jacksonObjectMapper().readTree(response.body ?: "{}")
-        assertThat(tree.get("deleted").asInt()).isEqualTo(0)
     }
 
     @Test

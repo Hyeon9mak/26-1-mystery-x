@@ -129,17 +129,6 @@ class FileRepository(
         )
     }
 
-    fun deleteFile(id: String): Int {
-        return jdbcTemplate.update("DELETE FROM files WHERE id = ?", id)
-    }
-
-    fun deleteFilesInFolder(folderPath: String): Int {
-        return jdbcTemplate.update(
-            "DELETE FROM files WHERE file_path = ? OR file_path LIKE ?",
-            folderPath, "$folderPath/%",
-        )
-    }
-
     fun insertFile(response: FileUploadResponse) {
         jdbcTemplate.update(
             """
