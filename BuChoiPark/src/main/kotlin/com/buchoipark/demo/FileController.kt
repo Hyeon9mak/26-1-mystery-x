@@ -106,18 +106,6 @@ class FileController(
         return ResponseEntity.ok(mapOf("updated" to result.updated, "fromPath" to result.fromPath, "toPath" to result.toPath))
     }
 
-    @DeleteMapping("/files/{id}")
-    fun deleteFile(@PathVariable("id") id: String): ResponseEntity<Void> {
-        return if (fileService.deleteFile(id)) ResponseEntity.noContent().build()
-        else ResponseEntity.status(HttpStatus.NOT_FOUND).build()
-    }
-
-    @DeleteMapping("/folders")
-    fun deleteFolder(@RequestParam("folderPath") folderPath: String): ResponseEntity<Map<String, Any>> {
-        if (folderPath.isBlank()) return ResponseEntity.status(HttpStatus.BAD_REQUEST).build()
-        return ResponseEntity.ok(mapOf("deleted" to fileService.deleteFilesInFolder(folderPath)))
-    }
-
     @DeleteMapping("/files")
     fun deleteFile(
         @RequestParam("userId") userId: String,
